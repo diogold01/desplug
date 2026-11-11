@@ -150,11 +150,14 @@ fun DesplugMainApp() {
         }
     }
 
-    // Timer em segundo plano para contagem regressiva da espera de 5 minutos
-    LaunchedEffect(quickBlockState.isActive, quickBlockState.unlockRequestedAtMillis) {
-        while (quickBlockState.isActive && quickBlockState.unlockRequestedAtMillis > 0L) {
+    // Timer contínuo para contagem regressiva viva na tela a cada segundo
+    LaunchedEffect(Unit) {
+        while (true) {
             delay(1000L)
-            quickBlockState = BlockPreferences.getQuickBlockState(context)
+            val updatedQuickBlock = BlockPreferences.getQuickBlockState(context)
+            if (updatedQuickBlock != quickBlockState) {
+                quickBlockState = updatedQuickBlock
+            }
         }
     }
 

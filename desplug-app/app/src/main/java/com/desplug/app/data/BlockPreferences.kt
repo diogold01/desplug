@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import com.desplug.app.data.model.AppBlockRule
+import com.desplug.app.data.model.AttemptRecord
 import com.desplug.app.data.model.QuickBlockState
 import com.desplug.app.data.model.ScheduleRule
 import com.desplug.app.ui.LockActivity
@@ -14,7 +15,7 @@ import java.security.MessageDigest
 import java.util.Calendar
 
 /**
- * Gerenciador centralizado de preferências, regras e estado do Quick Block do Desplug.
+ * Gerenciador centralizado de preferências, regras, estado do Quick Block e contador de tentativas.
  */
 object BlockPreferences {
     private const val PREFS_NAME = "desplug_block_prefs"
@@ -24,6 +25,8 @@ object BlockPreferences {
     private const val KEY_QUICK_BLOCK_STATE = "quick_block_state_json"
     private const val KEY_PIN_HASH = "security_pin_hash"
     private const val KEY_DAY_RESET_HOUR = "day_reset_hour"
+    private const val KEY_ATTEMPTS_JSON = "attempts_records_json"
+    private const val KEY_ATTEMPTS_DAY_TIMESTAMP = "attempts_day_timestamp"
 
     @Volatile
     private var lastLockTriggerTimeMs: Long = 0L
@@ -51,6 +54,91 @@ object BlockPreferences {
         prefs(context).edit().putInt(KEY_DAY_RESET_HOUR, clampedHour).apply()
     }
 
+    // --- CONTADOR DE TENTATIVAS DIÁRIAS ---
+
+    /**
+     * Incrementa o contador de tentativas para o app bloqueado e retorna a contagem atualizada de hoje.
+     */
+    @Synchronized
+    fun recordAndGetAttemptCount(context: Context, packageName: String): Int {
+        val resetHour = getDayResetHour(context)
+        val todayStart = UsageStatsCalculator.getStartOfDayMillis(resetHour)
+        val savedDay = prefs(context).getLong(KEY_ATTEMPTS_DAY_TIMESTAMP, 0L)
+
+        val attemptsMap = mutableMapOf<String, AttemptRecord>()
+
+        // Se virou o dia pelo horário de reset, zera as tentativas do dia anterior
+        if (savedDay == todayStart) {
+            val jsonString = prefs(context).getString(KEY_ATTEMPTS_JSON, null)
+            if (!jsonString.isNullOrBlank()) {
+                try {
+                    val array = JSONArray(jsonString)
+                    for (i in 0 until array.length()) {
+                        val record = AttemptRecord.fromJson(array.getJSONObject(i))
+                        attemptsMap[record.packageName] = record
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        val currentRecord = attemptsMap[packageName]
+        val newCount = (currentRecord?.count ?: 0) + 1
+        attemptsMap[packageName] = AttemptRecord(
+            packageName = packageName,
+            count = newCount,
+            lastAttemptTimestamp = System.currentTimeMillis()
+        )
+
+        val outputArray = JSONArray()
+        attemptsMap.values.forEach { outputArray.put(it.toJson()) }
+
+        prefs(context).edit()
+            .putLong(KEY_ATTEMPTS_DAY_TIMESTAMP, todayStart)
+            .putString(KEY_ATTEMPTS_JSON, outputArray.toString())
+            .apply()
+
+        return newCount
+    }
+
+    fun getAttemptCountToday(context: Context, packageName: String): Int {
+        val resetHour = getDayResetHour(context)
+        val todayStart = UsageStatsCalculator.getStartOfDayMillis(resetHour)
+        val savedDay = prefs(context).getLong(KEY_ATTEMPTS_DAY_TIMESTAMP, 0L)
+        if (savedDay != todayStart) return 0
+
+        val jsonString = prefs(context).getString(KEY_ATTEMPTS_JSON, null) ?: return 0
+        return try {
+            val array = JSONArray(jsonString)
+            for (i in 0 until array.length()) {
+                val record = AttemptRecord.fromJson(array.getJSONObject(i))
+                if (record.packageName == packageName) return record.count
+            }
+            0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    fun getTotalAttemptsToday(context: Context): Int {
+        val resetHour = getDayResetHour(context)
+        val todayStart = UsageStatsCalculator.getStartOfDayMillis(resetHour)
+        val savedDay = prefs(context).getLong(KEY_ATTEMPTS_DAY_TIMESTAMP, 0L)
+        if (savedDay != todayStart) return 0
+
+        val jsonString = prefs(context).getString(KEY_ATTEMPTS_JSON, null) ?: return 0
+        return try {
+            val array = JSONArray(jsonString)
+            var total = 0
+            for (i in 0 until array.length()) {
+                val record = AttemptRecord.fromJson(array.getJSONObject(i))
+                total += record.count
+            }
+            total
+        } catch (_: Exception) {
+            0
+        }
+    }
+
     // --- GERENCIAMENTO DE PIN ---
 
     fun hasPinConfigured(context: Context): Boolean {
@@ -63,7 +151,7 @@ object BlockPreferences {
     }
 
     fun verifySecurityPin(context: Context, pin: String): Boolean {
-        val savedHash = prefs(context).getString(KEY_PIN_HASH, null) ?: return true // Se não tem PIN, aceita
+        val savedHash = prefs(context).getString(KEY_PIN_HASH, null) ?: return true
         return savedHash == hashPin(pin)
     }
 
@@ -72,19 +160,17 @@ object BlockPreferences {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    // --- QUICK BLOCK (BLOQUEIO TEMPORÁRIO) ---
+    // --- QUICK BLOCK ---
 
     fun getQuickBlockState(context: Context): QuickBlockState {
         val jsonString = prefs(context).getString(KEY_QUICK_BLOCK_STATE, null) ?: return QuickBlockState()
         return try {
             val state = QuickBlockState.fromJson(JSONObject(jsonString))
             val now = System.currentTimeMillis()
-            // Se expirou naturalmente
             if (state.isActive && state.hasExpired(now)) {
                 stopQuickBlock(context)
                 QuickBlockState()
             } else if (state.isActive && state.isCooldownFinished(now)) {
-                // Se a espera de 5 minutos terminou
                 stopQuickBlock(context)
                 QuickBlockState()
             } else {
@@ -210,7 +296,7 @@ object BlockPreferences {
         prefs(context).edit().putString(KEY_SCHEDULE_RULES, jsonArray.toString()).apply()
     }
 
-    // --- AVALIAÇÃO DE BLOQUEIO (MAIS RESTRITIVA VENCE) ---
+    // --- AVALIAÇÃO DE BLOQUEIO ---
 
     fun evaluateBlockStatus(context: Context, packageName: String): Pair<Boolean, String?> {
         if (packageName.isBlank() || packageName == context.packageName) return Pair(false, null)
@@ -218,10 +304,9 @@ object BlockPreferences {
 
         val nowMillis = System.currentTimeMillis()
 
-        // 1. Prioridade Absoluta: Quick Block Ativo
+        // 1. Quick Block
         val quickBlock = getQuickBlockState(context)
         if (quickBlock.isActive && !quickBlock.hasExpired(nowMillis)) {
-            // Se os apps alvo foram definidos ou se bloqueia todos os monitorados
             val isTarget = if (quickBlock.targetPackages.isNotEmpty()) {
                 quickBlock.targetPackages.contains(packageName)
             } else {
@@ -243,7 +328,7 @@ object BlockPreferences {
 
         val nowCalendar = Calendar.getInstance()
 
-        // 2. Prioridade B: Regras de Horário Ativas Agora
+        // 2. Regras de Horário
         val activeSchedules = getAllScheduleRules(context).filter {
             it.isEnabled && it.isCurrentlyActive(nowCalendar) && it.targetPackages.contains(packageName)
         }
@@ -256,7 +341,7 @@ object BlockPreferences {
             )
         }
 
-        // 3. Prioridade C: Regra específica do app (Sempre bloqueado ou limite diário)
+        // 3. Regra por aplicativo
         val appRule = getRuleForPackage(context, packageName)
         if (appRule != null) {
             if (appRule.isAlwaysBlocked || appRule.dailyLimitMinutes <= 0) {
@@ -284,6 +369,9 @@ object BlockPreferences {
         lastLockedPackage = blockedPackage
         lastLockTriggerTimeMs = now
 
+        // Registra e incrementa o contador de tentativas diárias
+        val attemptCount = recordAndGetAttemptCount(context, blockedPackage)
+
         val lockIntent = Intent(context.applicationContext, LockActivity::class.java).apply {
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -293,6 +381,7 @@ object BlockPreferences {
             )
             putExtra(LockActivity.EXTRA_BLOCKED_PACKAGE, blockedPackage)
             putExtra(LockActivity.EXTRA_BLOCK_REASON, reason)
+            putExtra(LockActivity.EXTRA_ATTEMPT_COUNT, attemptCount)
         }
         context.applicationContext.startActivity(lockIntent)
     }

@@ -10,12 +10,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -37,8 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.desplug.app.ui.theme.DesplugTheme
 
 /**
- * Tela de Bloqueio sobreposta instantaneamente quando um app restrito é aberto
- * ou quando o limite diário de uso é atingido.
+ * Tela de Bloqueio sobreposta instantaneamente com contador de tentativas hoje.
  */
 class LockActivity : ComponentActivity() {
 
@@ -57,16 +58,17 @@ class LockActivity : ComponentActivity() {
     private fun renderLockScreen(currentIntent: Intent?) {
         val blockedPackage = currentIntent?.getStringExtra(EXTRA_BLOCKED_PACKAGE).orEmpty()
         val blockReason = currentIntent?.getStringExtra(EXTRA_BLOCK_REASON)
+        val attemptCount = currentIntent?.getIntExtra(EXTRA_ATTEMPT_COUNT, 1) ?: 1
 
         setContent {
             DesplugTheme(darkTheme = true) {
-                // Impede o retorno ao app bloqueado pela tecla Voltar
                 BackHandler(enabled = true) {
                     goToHomeScreen()
                 }
                 LockScreenContent(
                     blockedPackage = blockedPackage,
                     reason = blockReason,
+                    attemptCount = attemptCount,
                     onGoHome = { goToHomeScreen() }
                 )
             }
@@ -85,6 +87,7 @@ class LockActivity : ComponentActivity() {
     companion object {
         const val EXTRA_BLOCKED_PACKAGE = "extra_blocked_package"
         const val EXTRA_BLOCK_REASON = "extra_block_reason"
+        const val EXTRA_ATTEMPT_COUNT = "extra_attempt_count"
     }
 }
 
@@ -92,6 +95,7 @@ class LockActivity : ComponentActivity() {
 private fun LockScreenContent(
     blockedPackage: String,
     reason: String?,
+    attemptCount: Int,
     onGoHome: () -> Unit
 ) {
     val context = LocalContext.current
@@ -133,27 +137,55 @@ private fun LockScreenContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Limite de Foco Atingido",
+                text = "Modo Foco Ativo",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = reason ?: "$appLabel está bloqueado pelo Desplug neste momento para proteger a sua rotina.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color(0xFF9CA3AF),
                 textAlign = TextAlign.Center,
-                lineHeight = 24.sp
+                lineHeight = 22.sp
             )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // BADGE DE CONTADOR DE TENTATIVAS DIÁRIAS
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF261922), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "✋",
+                        fontSize = 18.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (attemptCount == 1) {
+                            "Você tentou abrir 1 vez hoje"
+                        } else {
+                            "Você tentou abrir $attemptCount vezes hoje"
+                        },
+                        color = Color(0xFFF87171),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
 
             Button(
                 onClick = onGoHome,

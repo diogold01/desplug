@@ -33,7 +33,7 @@ Este documento resume a visão de produto, arquitetura, decisões técnicas já 
 - [x] **Etapa 2:** Seleção de Apps + Limite Diário de Minutos (Room DB / Local Cache)
 - [x] **Etapa 3:** Bloqueio por Horário (Regras recorrentes, fuso local e regra mais restritiva)
 - [x] **Etapa 4:** Quick Block (Bloqueio Rápido) + PIN + Espera de 5 min com contador
-- [ ] **Etapa 5:** Contador de Tentativas na Tela de Bloqueio ("Tentou abrir X vezes hoje")
+- [x] **Etapa 5:** Contador de Tentativas na Tela de Bloqueio ("Tentou abrir X vezes hoje")
 - [ ] **Etapa 6:** Proteção Anti-Burla (Device Admin contra desinstalação + proteção das Configurações)
 - [ ] **Etapa 7:** Polimento final, otimização de bateria e geração do APK release
 
@@ -68,3 +68,8 @@ Este documento resume a visão de produto, arquitetura, decisões técnicas já 
   - Fluxo de desativação com fricção psicológica anti-impulso: digitar o PIN correto dispara contagem regressiva visível de 5 minutos (300 segundos).
   - Durante os 5 minutos o bloqueio continua rigorosamente ativo, com barra de progresso em tempo real e botão para **Cancelar e Manter o Bloqueio**.
   - Gerado build limpo: `Desplug-Etapa4.apk`.
+- **Etapa 5 (Contador de Tentativas Diárias na Tela de Bloqueio + Timer Vivo):**
+  - Corrigido o timer do Quick Block no Compose para atualizar a cada 1 segundo em tempo real na tela sem precisar trocar de aba.
+  - Criado modelo `AttemptRecord.kt` e lógica no `BlockPreferences.kt` com reset sincronizado no horário diário configurado.
+  - Na tela de bloqueio `LockActivity.kt`, adicionado badge visual destacado: *"✋ Você tentou abrir X vezes hoje"*, incrementando a cada tentativa de abertura do app restrito.
+  - Gerado build limpo: `Desplug-Etapa5.apk`.
