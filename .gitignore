@@ -1,0 +1,17 @@
+# Build & Binários
+*.apk
+*.aab
+build/
+.gradle/
+local.properties
+
+# Ferramentas e engenharia reversa local
+rea/
+tools/
+*.xapk
+*.webp
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db
+*.log
