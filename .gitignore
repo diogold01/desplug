@@ -11,7 +11,24 @@ tools/
 *.xapk
 *.webp
 
-# Arquivos de sistema
+# IDEs & Sistema
+.idea/
+.vscode/
 .DS_Store
 Thumbs.db
 *.log
+
+# Arquivos de Governança Interna, Contexto e IA (Uso estritamente local)
+GEMINI.md
+rules.md
+context.md
+CLAUDE.md
+AGENTS.md
+*.agent*
+*prompt*
+.gemini/
+.claude/
+.cursor/
+.antigravity/
+.brain/
+.system_generated/
