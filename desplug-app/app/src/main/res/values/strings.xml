@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Desplug</string>
     <string name="accessibility_service_label">Desplug — Monitor de Foco</string>
-    <string name="accessibility_service_description">Permite ao Desplug detectar instantaneamente quando um aplicativo bloqueado é aberto para exibir a tela de foco, sem coletar nenhum dado pessoal.</string>
+    <string name="accessibility_service_description">Permite ao Desplug detectar instantaneamente quando um aplicativo bloqueado é aberto e impedir alterações nas configurações durante um bloqueio ativo, sem coletar nenhum dado pessoal.</string>
+    <string name="device_admin_label">Desplug — Proteção contra Desinstalação</string>
+    <string name="device_admin_description">Impede que o Desplug seja desinstalado por impulso enquanto um bloqueio de foco estiver ativo.</string>
 </resources>

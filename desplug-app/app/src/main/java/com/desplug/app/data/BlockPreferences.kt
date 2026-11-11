@@ -15,11 +15,12 @@ import java.security.MessageDigest
 import java.util.Calendar
 
 /**
- * Gerenciador centralizado de preferências, regras, estado do Quick Block e contador de tentativas.
+ * Gerenciador centralizado de preferências, regras, Quick Block, tentativas e proteção Anti-Burla.
  */
 object BlockPreferences {
     private const val PREFS_NAME = "desplug_block_prefs"
     private const val KEY_BLOCKING_ENABLED = "blocking_enabled"
+    private const val KEY_ANTI_TAMPER_ENABLED = "anti_tamper_enabled"
     private const val KEY_BLOCK_RULES = "block_rules_json"
     private const val KEY_SCHEDULE_RULES = "schedule_rules_json"
     private const val KEY_QUICK_BLOCK_STATE = "quick_block_state_json"
@@ -27,12 +28,16 @@ object BlockPreferences {
     private const val KEY_DAY_RESET_HOUR = "day_reset_hour"
     private const val KEY_ATTEMPTS_JSON = "attempts_records_json"
     private const val KEY_ATTEMPTS_DAY_TIMESTAMP = "attempts_day_timestamp"
+    private const val KEY_TEMP_SETTINGS_PASS_UNTIL = "temp_settings_pass_until"
 
     @Volatile
     private var lastLockTriggerTimeMs: Long = 0L
 
     @Volatile
     private var lastLockedPackage: String = ""
+
+    @Volatile
+    private var temporarySettingsPassUntilElapsedMs: Long = 0L
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -43,6 +48,59 @@ object BlockPreferences {
 
     fun setBlockingEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_BLOCKING_ENABLED, enabled).apply()
+    }
+
+    fun isAntiTamperEnabled(context: Context): Boolean {
+        return prefs(context).getBoolean(KEY_ANTI_TAMPER_ENABLED, true)
+    }
+
+    fun setAntiTamperEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_ANTI_TAMPER_ENABLED, enabled).apply()
+    }
+
+    /**
+     * Libera temporariamente a abertura das Configurações quando o próprio usuário clica
+     * em um botão de conceder permissão dentro do Desplug.
+     */
+    fun grantTemporarySettingsPass(durationMs: Long = 35_000L) {
+        temporarySettingsPassUntilElapsedMs = SystemClock.elapsedRealtime() + durationMs
+    }
+
+    fun hasTemporarySettingsPass(): Boolean {
+        return SystemClock.elapsedRealtime() < temporarySettingsPassUntilElapsedMs
+    }
+
+    /**
+     * Verifica se existe QUALQUER bloqueio ativo neste exato momento (Quick Block, Horário em execução
+     * ou algum app com limite estourado / sempre bloqueado).
+     */
+    fun hasAnyActiveProtectionNow(context: Context): Boolean {
+        if (!isBlockingEnabled(context)) return false
+
+        val nowMillis = System.currentTimeMillis()
+        val quickBlock = getQuickBlockState(context)
+        if (quickBlock.isActive && !quickBlock.hasExpired(nowMillis)) {
+            return true
+        }
+
+        val nowCalendar = Calendar.getInstance()
+        val hasActiveSchedule = getAllScheduleRules(context).any {
+            it.isEnabled && it.isCurrentlyActive(nowCalendar) && it.targetPackages.isNotEmpty()
+        }
+        if (hasActiveSchedule) return true
+
+        val rules = getAllRules(context)
+        if (rules.any { it.isAlwaysBlocked }) return true
+
+        if (rules.isNotEmpty()) {
+            val resetHour = getDayResetHour(context)
+            val usageMap = UsageStatsCalculator.getAllUsageTodayInMinutes(context, resetHour)
+            if (rules.any { it.dailyLimitMinutes > 0 && usageMap.getOrDefault(it.packageName, 0) >= it.dailyLimitMinutes }) {
+                return true
+            }
+        }
+
+        return false
     }
 
     fun getDayResetHour(context: Context): Int {
@@ -56,9 +114,6 @@ object BlockPreferences {
 
     // --- CONTADOR DE TENTATIVAS DIÁRIAS ---
 
-    /**
-     * Incrementa o contador de tentativas para o app bloqueado e retorna a contagem atualizada de hoje.
-     */
     @Synchronized
     fun recordAndGetAttemptCount(context: Context, packageName: String): Int {
         val resetHour = getDayResetHour(context)
@@ -67,7 +122,6 @@ object BlockPreferences {
 
         val attemptsMap = mutableMapOf<String, AttemptRecord>()
 
-        // Se virou o dia pelo horário de reset, zera as tentativas do dia anterior
         if (savedDay == todayStart) {
             val jsonString = prefs(context).getString(KEY_ATTEMPTS_JSON, null)
             if (!jsonString.isNullOrBlank()) {
@@ -369,7 +423,6 @@ object BlockPreferences {
         lastLockedPackage = blockedPackage
         lastLockTriggerTimeMs = now
 
-        // Registra e incrementa o contador de tentativas diárias
         val attemptCount = recordAndGetAttemptCount(context, blockedPackage)
 
         val lockIntent = Intent(context.applicationContext, LockActivity::class.java).apply {

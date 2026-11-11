@@ -1,11 +1,15 @@
 package com.desplug.app
 
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +63,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,8 +84,10 @@ import com.desplug.app.data.BlockPreferences
 import com.desplug.app.data.model.AppBlockRule
 import com.desplug.app.data.model.QuickBlockState
 import com.desplug.app.data.model.ScheduleRule
+import com.desplug.app.receiver.DesplugDeviceAdminReceiver
 import com.desplug.app.service.MonitorForegroundService
 import com.desplug.app.ui.theme.DesplugTheme
+import com.desplug.app.util.PermissionHelper
 import com.desplug.app.util.UsageStatsCalculator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -114,6 +121,12 @@ fun DesplugMainApp() {
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Quick Block, 1 = Horários, 2 = Limites Diários
     var isBlockingEnabled by remember { mutableStateOf(BlockPreferences.isBlockingEnabled(context)) }
+    var isAntiTamperEnabled by remember { mutableStateOf(BlockPreferences.isAntiTamperEnabled(context)) }
+    var isDeviceAdminActive by remember { mutableStateOf(PermissionHelper.isDeviceAdminActive(context)) }
+    var hasAccessibility by remember { mutableStateOf(PermissionHelper.isAccessibilityServiceEnabled(context)) }
+    var hasUsageStats by remember { mutableStateOf(PermissionHelper.hasUsageStatsPermission(context)) }
+    var hasOverlay by remember { mutableStateOf(PermissionHelper.hasOverlayPermission(context)) }
+    var hasBatteryExemption by remember { mutableStateOf(PermissionHelper.isIgnoringBatteryOptimizations(context)) }
     var resetHour by remember { mutableIntStateOf(BlockPreferences.getDayResetHour(context)) }
 
     var quickBlockState by remember { mutableStateOf(BlockPreferences.getQuickBlockState(context)) }
@@ -130,12 +143,29 @@ fun DesplugMainApp() {
     var showUnlockPinDialog by remember { mutableStateOf(false) }
     var showStartQuickBlockDialog by remember { mutableStateOf(false) }
 
+    var currentTimeMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var totalAttemptsToday by remember { mutableIntStateOf(BlockPreferences.getTotalAttemptsToday(context)) }
+
+    val deviceAdminLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        isDeviceAdminActive = PermissionHelper.isDeviceAdminActive(context)
+    }
+
     fun refreshState() {
+        currentTimeMillis = System.currentTimeMillis()
         isBlockingEnabled = BlockPreferences.isBlockingEnabled(context)
+        isAntiTamperEnabled = BlockPreferences.isAntiTamperEnabled(context)
+        isDeviceAdminActive = PermissionHelper.isDeviceAdminActive(context)
+        hasAccessibility = PermissionHelper.isAccessibilityServiceEnabled(context)
+        hasUsageStats = PermissionHelper.hasUsageStatsPermission(context)
+        hasOverlay = PermissionHelper.hasOverlayPermission(context)
+        hasBatteryExemption = PermissionHelper.isIgnoringBatteryOptimizations(context)
         resetHour = BlockPreferences.getDayResetHour(context)
         quickBlockState = BlockPreferences.getQuickBlockState(context)
         scheduleRules = BlockPreferences.getAllScheduleRules(context)
         appRules = BlockPreferences.getAllRules(context)
+        totalAttemptsToday = BlockPreferences.getTotalAttemptsToday(context)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -154,10 +184,10 @@ fun DesplugMainApp() {
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000L)
-            val updatedQuickBlock = BlockPreferences.getQuickBlockState(context)
-            if (updatedQuickBlock != quickBlockState) {
-                quickBlockState = updatedQuickBlock
-            }
+            currentTimeMillis = System.currentTimeMillis()
+            quickBlockState = BlockPreferences.getQuickBlockState(context)
+            isDeviceAdminActive = PermissionHelper.isDeviceAdminActive(context)
+            totalAttemptsToday = BlockPreferences.getTotalAttemptsToday(context)
         }
     }
 
@@ -185,12 +215,12 @@ fun DesplugMainApp() {
                         )
                         Text(
                             text = when {
-                                quickBlockState.isActive && quickBlockState.isCoolingDown() -> {
-                                    val rem = quickBlockState.remainingCooldownSeconds()
-                                    "Espera de desbloqueio: %d:%02d".format(rem / 60, rem % 60)
+                                quickBlockState.isActive && quickBlockState.isCoolingDown(currentTimeMillis) -> {
+                                    val rem = quickBlockState.remainingCooldownSeconds(currentTimeMillis)
+                                    "Espera de desbloqueio: %02d:%02d".format(rem / 60, rem % 60)
                                 }
                                 quickBlockState.isActive -> "Quick Block Ativo • Foco Imediato"
-                                else -> "Proteção de Foco Pessoal"
+                                else -> "Proteção Ativa • $totalAttemptsToday tentativa(s) bloqueada(s) hoje"
                             },
                             color = if (quickBlockState.isActive) Color(0xFFEF4444) else Color(0xFF10B981),
                             fontSize = 12.sp
@@ -265,10 +295,43 @@ fun DesplugMainApp() {
 
             when (selectedTab) {
                 0 -> {
-                    // ABA 0: QUICK BLOCK (BLOQUEIO TEMPORÁRIO)
+                    // ABA 0: QUICK BLOCK & PROTEÇÃO ANTI-BURLA
+                    val hasAnyActiveBlock = BlockPreferences.hasAnyActiveProtectionNow(context)
                     QuickBlockTabContent(
                         state = quickBlockState,
+                        currentTimeMillis = currentTimeMillis,
                         hasPin = BlockPreferences.hasPinConfigured(context),
+                        isDeviceAdminActive = isDeviceAdminActive,
+                        isAntiTamperEnabled = isAntiTamperEnabled,
+                        hasAnyActiveBlock = hasAnyActiveBlock,
+                        hasAccessibility = hasAccessibility,
+                        hasUsageStats = hasUsageStats,
+                        hasOverlay = hasOverlay,
+                        hasBatteryExemption = hasBatteryExemption,
+                        onActivateDeviceAdmin = {
+                            BlockPreferences.grantTemporarySettingsPass(45_000L)
+                            val adminComponent = ComponentName(context, DesplugDeviceAdminReceiver::class.java)
+                            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+                                putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+                                putExtra(
+                                    DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                                    "Ative o Administrador do Dispositivo para impedir que o Desplug seja desinstalado enquanto um bloqueio estiver ativo."
+                                )
+                            }
+                            try {
+                                deviceAdminLauncher.launch(intent)
+                            } catch (_: Exception) {
+                                PermissionHelper.openDeviceAdminActivation(context)
+                            }
+                        },
+                        onToggleAntiTamper = { enabled ->
+                            if (!enabled && hasAnyActiveBlock) {
+                                // Impede desligar o Anti-Burla enquanto houver bloqueio em execução
+                                return@QuickBlockTabContent
+                            }
+                            isAntiTamperEnabled = enabled
+                            BlockPreferences.setAntiTamperEnabled(context, enabled)
+                        },
                         onStartQuickBlockClick = {
                             if (!BlockPreferences.hasPinConfigured(context)) {
                                 showPinSetupDialog = true
@@ -427,11 +490,22 @@ fun DesplugMainApp() {
 @Composable
 private fun QuickBlockTabContent(
     state: QuickBlockState,
+    currentTimeMillis: Long,
     hasPin: Boolean,
+    isDeviceAdminActive: Boolean,
+    isAntiTamperEnabled: Boolean,
+    hasAnyActiveBlock: Boolean,
+    hasAccessibility: Boolean,
+    hasUsageStats: Boolean,
+    hasOverlay: Boolean,
+    hasBatteryExemption: Boolean,
+    onActivateDeviceAdmin: () -> Unit,
+    onToggleAntiTamper: (Boolean) -> Unit,
     onStartQuickBlockClick: () -> Unit,
     onRequestUnlockClick: () -> Unit,
     onCancelUnlockClick: () -> Unit
 ) {
+    val context = LocalContext.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -476,15 +550,20 @@ private fun QuickBlockTabContent(
                     Text(
                         text = if (state.isActive) {
                             if (state.durationMinutes > 0) {
-                                "Bloqueando ${state.targetPackages.size} aplicativo(s) por ${state.durationMinutes} minutos."
+                                val remDur = state.remainingDurationSeconds(currentTimeMillis)
+                                "Bloqueando ${state.targetPackages.size} app(s) • Restam %02d:%02d".format(
+                                    remDur / 60,
+                                    remDur % 60
+                                )
                             } else {
                                 "Bloqueando ${state.targetPackages.size} aplicativo(s) até ser desativado."
                             }
                         } else {
                             "Ative o bloqueio temporário com um toque para entrar em foco imediato."
                         },
-                        color = Color(0xFF9CA3AF),
-                        fontSize = 13.sp,
+                        color = if (state.isActive && state.durationMinutes > 0) Color(0xFF10B981) else Color(0xFF9CA3AF),
+                        fontWeight = if (state.isActive && state.durationMinutes > 0) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = 14.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
 
@@ -506,8 +585,8 @@ private fun QuickBlockTabContent(
                         }
                     } else {
                         // Quando está ativo, exibe se está em espera de 5 minutos ou botão de solicitar desbloqueio
-                        if (state.isCoolingDown()) {
-                            val remaining = state.remainingCooldownSeconds()
+                        if (state.isCoolingDown(currentTimeMillis)) {
+                            val remaining = state.remainingCooldownSeconds(currentTimeMillis)
                             val progress = 1f - (remaining.toFloat() / state.unlockCooldownSeconds.toFloat())
 
                             Column(
@@ -566,6 +645,128 @@ private fun QuickBlockTabContent(
                                 )
                             ) {
                                 Text("Desativar Bloqueio (PIN + 5 min)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Seção Proteção Anti-Burla (Unificada: Contra Desinstalação e Forçar Parada)
+        item {
+            Text(
+                text = "Proteção Anti-Burla",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+        }
+
+        item {
+            val isProtectionReady = isAntiTamperEnabled && hasAccessibility
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isProtectionReady) Color(0xFF11221C) else Color(0xFF161B22)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isProtectionReady) Color(0xFF10B981) else Color(0xFFF59E0B))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Impedir Desinstalação e Forçar Parada",
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isProtectionReady && hasAnyActiveBlock) {
+                                "Blindagem ativa agora! Fecha automaticamente tentativas de desinstalar ou forçar parada enquanto houver bloqueio em execução."
+                            } else if (isProtectionReady) {
+                                "Proteção pronta: impedirá a desinstalação e o acesso às configurações do Desplug assim que um bloqueio estiver ativo."
+                            } else {
+                                "Proteção desativada. Ative a chave ao lado para blindar o Desplug durante os bloqueios."
+                            },
+                            color = if (isProtectionReady && hasAnyActiveBlock) Color(0xFF10B981) else Color(0xFF9CA3AF),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = isAntiTamperEnabled,
+                        enabled = !(isAntiTamperEnabled && hasAnyActiveBlock),
+                        onCheckedChange = onToggleAntiTamper,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Color(0xFF10B981)
+                        )
+                    )
+                }
+            }
+        }
+
+        // Card 3: Alerta se alguma permissão essencial foi revogada
+        if (!hasAccessibility || !hasUsageStats || !hasOverlay || !hasBatteryExemption) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF22151B))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "⚠️ Permissões do Sistema Pendentes",
+                            color = Color(0xFFF87171),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        if (!hasAccessibility) {
+                            Button(
+                                onClick = { PermissionHelper.openAccessibilitySettings(context) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color(0xFF052E16))
+                            ) {
+                                Text("Ativar Serviço de Acessibilidade", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        if (!hasUsageStats) {
+                            Button(
+                                onClick = { PermissionHelper.openUsageStatsSettings(context) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color(0xFF052E16))
+                            ) {
+                                Text("Ativar Acesso ao Uso", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        if (!hasOverlay) {
+                            Button(
+                                onClick = { PermissionHelper.openOverlaySettings(context) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color(0xFF052E16))
+                            ) {
+                                Text("Ativar Exibir Sobre Outros Apps", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                        if (!hasBatteryExemption) {
+                            Button(
+                                onClick = { PermissionHelper.requestIgnoreBatteryOptimizations(context) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF374151), contentColor = Color.White)
+                            ) {
+                                Text("Ignorar Otimização de Bateria", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                         }
                     }

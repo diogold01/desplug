@@ -9,7 +9,19 @@ local.properties
 rea/
 tools/
 *.xapk
-*.webp
+*.zip
+
+# Arquivos de Governança de IA e Instruções Locais (NUNCA COMMITTAR)
+GEMINI.md
+rules.md
+context.md
+.gemini/
+.brain/
+CLAUDE.md
+
+# Arquivos de design temporários e mockups locais na raiz
+*.html
+unnamed*.webp
 
 # IDEs & Sistema
 .idea/

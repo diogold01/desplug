@@ -2,6 +2,7 @@ package com.desplug.app.util
 
 import android.Manifest
 import android.app.AppOpsManager
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,8 @@ import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import com.desplug.app.data.BlockPreferences
+import com.desplug.app.receiver.DesplugDeviceAdminReceiver
 import com.desplug.app.service.DesplugAccessibilityService
 
 /**
@@ -42,6 +45,7 @@ object PermissionHelper {
     }
 
     fun openUsageStatsSettings(context: Context) {
+        BlockPreferences.grantTemporarySettingsPass()
         val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
             data = Uri.fromParts("package", context.packageName, null)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -64,6 +68,7 @@ object PermissionHelper {
     }
 
     fun openOverlaySettings(context: Context) {
+        BlockPreferences.grantTemporarySettingsPass()
         val intent = Intent(
             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
             Uri.parse("package:${context.packageName}")
@@ -74,7 +79,7 @@ object PermissionHelper {
     }
 
     /**
-     * 3. Serviço de Acessibilidade (Detecção instantânea de abertura de apps)
+     * 3. Serviço de Acessibilidade (Detecção instantânea de abertura de apps e Anti-Burla)
      */
     fun isAccessibilityServiceEnabled(context: Context): Boolean {
         val expectedComponent = ComponentName(context, DesplugAccessibilityService::class.java)
@@ -89,6 +94,7 @@ object PermissionHelper {
     }
 
     fun openAccessibilitySettings(context: Context) {
+        BlockPreferences.grantTemporarySettingsPass()
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -104,6 +110,7 @@ object PermissionHelper {
     }
 
     fun requestIgnoreBatteryOptimizations(context: Context) {
+        BlockPreferences.grantTemporarySettingsPass()
         try {
             val intent = Intent(
                 Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
@@ -135,9 +142,45 @@ object PermissionHelper {
     }
 
     /**
+     * 6. Administrador do Dispositivo (Device Admin — Proteção contra desinstalação)
+     */
+    fun isDeviceAdminActive(context: Context): Boolean {
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+            ?: return false
+        val adminComponent = ComponentName(context, DesplugDeviceAdminReceiver::class.java)
+        return dpm.isAdminActive(adminComponent)
+    }
+
+    fun openDeviceAdminActivation(context: Context) {
+        BlockPreferences.grantTemporarySettingsPass(45_000L)
+        val adminComponent = ComponentName(context, DesplugDeviceAdminReceiver::class.java)
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, adminComponent)
+            putExtra(
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Ative o Administrador do Dispositivo para impedir que o Desplug seja desinstalado enquanto um bloqueio estiver ativo."
+            )
+            if (context !is android.app.Activity) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            val fallback = Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
+                if (context !is android.app.Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            context.startActivity(fallback)
+        }
+    }
+
+    /**
      * Abre a tela "Informações do App" no sistema (útil para liberar "Configurações Restritas" no Android 13+)
      */
     fun openAppDetailsSettings(context: Context) {
+        BlockPreferences.grantTemporarySettingsPass()
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.fromParts("package", context.packageName, null)

@@ -32,6 +32,15 @@ data class QuickBlockState(
     }
 
     /**
+     * Retorna quantos segundos restam da duração total do Quick Block (quando possui duração definida).
+     */
+    fun remainingDurationSeconds(nowMillis: Long = System.currentTimeMillis()): Int {
+        if (!isActive || durationMinutes <= 0) return 0
+        val expiresAt = startedAtMillis + (durationMinutes * 60L * 1000L)
+        return ((expiresAt - nowMillis) / 1000L).toInt().coerceAtLeast(0)
+    }
+
+    /**
      * Retorna se o desbloqueio está em contagem regressiva de espera (cooldown).
      */
     fun isCoolingDown(nowMillis: Long = System.currentTimeMillis()): Boolean {

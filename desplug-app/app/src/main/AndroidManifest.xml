@@ -51,7 +51,7 @@
             android:taskAffinity=""
             android:theme="@style/Theme.Desplug" />
 
-        <!-- Serviço de Acessibilidade para detecção instantânea -->
+        <!-- Serviço de Acessibilidade para detecção instantânea e Anti-Burla -->
         <service
             android:name=".service.DesplugAccessibilityService"
             android:exported="false"
@@ -85,6 +85,21 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Administrador do Dispositivo (Device Admin contra desinstalação) -->
+        <receiver
+            android:name=".receiver.DesplugDeviceAdminReceiver"
+            android:description="@string/device_admin_description"
+            android:exported="true"
+            android:label="@string/device_admin_label"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_receiver" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
             </intent-filter>
         </receiver>
 
