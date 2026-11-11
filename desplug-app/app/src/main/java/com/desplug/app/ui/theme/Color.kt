@@ -24,8 +24,8 @@ val DesplugTrackBg = Color(0xFF12182A)
 val DesplugRingTrackBg = Color(0xFF10162A)
 val DesplugChipBorder = Color(0xFF232A3B)
 
-val DesplugNavBg = Color(0xEB0C0E16) // rgba(12, 14, 22, 0.92)
-val DesplugNavBorder = Color(0xFF1A2030)
+val DesplugNavBg = Color(0xFF090C16) // 100% sólido opaco para evitar vazamentos (Opção 1)
+val DesplugNavBorder = Color(0xFF1E2538)
 
 val DesplugSheetBg = Color(0xFF07090F)
 val DesplugSheetBorder = Color(0xFF1A2030)

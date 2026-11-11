@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,14 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,16 +29,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.desplug.app.ui.components.AppIconView
+import com.desplug.app.ui.components.DesplugCard
+import com.desplug.app.ui.components.DesplugCardType
+import com.desplug.app.ui.components.DesplugPrimaryButton
+import com.desplug.app.ui.components.ParticleCloudCanvas
+import com.desplug.app.ui.components.StaggeredFadeUp
+import com.desplug.app.ui.theme.DesplugBackground
+import com.desplug.app.ui.theme.DesplugRed
+import com.desplug.app.ui.theme.DesplugRedCardBg
+import com.desplug.app.ui.theme.DesplugRedCardBorder
+import com.desplug.app.ui.theme.DesplugTextPrimary
+import com.desplug.app.ui.theme.DesplugTextSecondary
 import com.desplug.app.ui.theme.DesplugTheme
+import com.desplug.app.ui.theme.InterTightFamily
 
 /**
- * Tela de Bloqueio sobreposta instantaneamente com contador de tentativas hoje.
+ * Tela de Bloqueio em tela cheia sobreposta instantaneamente com visual premium do Desplug.
  */
 class LockActivity : ComponentActivity() {
 
@@ -115,94 +127,103 @@ private fun LockScreenContent(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = Color(0xFF0D1117)
+        color = DesplugBackground
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 32.dp, vertical = 48.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
+            // Nuvem de partículas de fundo
+            ParticleCloudCanvas()
+
+            Column(
                 modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF1F2937)),
-                contentAlignment = Alignment.Center
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 28.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "🔒",
-                    fontSize = 42.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = "Modo Foco Ativo",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = reason ?: "$appLabel está bloqueado pelo Desplug neste momento para proteger a sua rotina.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFF9CA3AF),
-                textAlign = TextAlign.Center,
-                lineHeight = 22.sp
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // BADGE DE CONTADOR DE TENTATIVAS DIÁRIAS
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFF261922), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "✋",
-                        fontSize = 18.sp
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (attemptCount == 1) {
-                            "Você tentou abrir 1 vez hoje"
-                        } else {
-                            "Você tentou abrir $attemptCount vezes hoje"
-                        },
-                        color = Color(0xFFF87171),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                StaggeredFadeUp(delayMillis = 0) {
+                    AppIconView(
+                        packageName = blockedPackage,
+                        appName = appLabel,
+                        size = 72.dp
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(36.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
-                onClick = onGoHome,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF10B981),
-                    contentColor = Color(0xFF052E16)
-                )
-            ) {
-                Text(
-                    text = "Voltar à Tela Inicial",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                StaggeredFadeUp(delayMillis = 80) {
+                    Text(
+                        text = "Foco Protegido",
+                        fontFamily = InterTightFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 42.sp,
+                        lineHeight = 44.sp,
+                        letterSpacing = (-0.04).em,
+                        color = DesplugTextPrimary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                StaggeredFadeUp(delayMillis = 160) {
+                    Text(
+                        text = reason ?: "$appLabel está bloqueado pelo Desplug neste momento para proteger o seu tempo.",
+                        fontFamily = InterTightFamily,
+                        fontWeight = FontWeight.Normal,
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp,
+                        color = DesplugTextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(28.dp))
+
+                // Card de Alerta de Tentativas Diárias
+                StaggeredFadeUp(delayMillis = 240) {
+                    val shape = RoundedCornerShape(20.dp)
+                    Box(
+                        modifier = Modifier
+                            .clip(shape)
+                            .background(DesplugRedCardBg)
+                            .border(1.dp, DesplugRedCardBorder, shape)
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "✋",
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (attemptCount == 1) {
+                                    "Você tentou abrir 1 vez hoje"
+                                } else {
+                                    "Você tentou abrir $attemptCount vezes hoje"
+                                },
+                                fontFamily = InterTightFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = DesplugRed
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                StaggeredFadeUp(delayMillis = 320) {
+                    DesplugPrimaryButton(
+                        text = "Voltar à Tela Inicial",
+                        onClick = onGoHome
+                    )
+                }
             }
         }
     }

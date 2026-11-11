@@ -16,14 +16,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -37,9 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -51,6 +54,8 @@ import com.desplug.app.ui.components.DesplugCard
 import com.desplug.app.ui.components.DesplugCardType
 import com.desplug.app.ui.components.DesplugChip
 import com.desplug.app.ui.components.DesplugPrimaryButton
+import com.desplug.app.ui.components.ModernLimitSlider
+import com.desplug.app.ui.components.interpolateLimitColor
 import com.desplug.app.ui.theme.DesplugBackground
 import com.desplug.app.ui.theme.DesplugBlue
 import com.desplug.app.ui.theme.DesplugCardBg
@@ -130,7 +135,8 @@ fun AppLimitConfigSheet(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) { /* Consome toque */ }
-                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 32.dp)
+                .navigationBarsPadding()
+                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 28.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // Alça superior
@@ -174,80 +180,178 @@ fun AppLimitConfigSheet(
                 }
             }
 
-            // Card de Configuração de Minutos Diários
+            // Card de Configuração de Minutos Diários (Modern Limit Slider)
+            val currentProgress = ((limitMinutes - 5f) / (240f - 5f)).coerceIn(0f, 1f)
+            val currentColor = interpolateLimitColor(currentProgress)
+            val dayPercent = ((limitMinutes / 1440f) * 100).toInt().coerceAtLeast(1)
+
             DesplugCard(
                 type = DesplugCardType.DEFAULT,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "LIMITE DIÁRIO",
-                        fontFamily = InterTightFamily,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 12.sp,
-                        letterSpacing = 0.08.em,
-                        color = DesplugTextSecondary
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(top = 10.dp, bottom = 12.dp)
-                    ) {
-                        Text(
-                            text = limitMinutes.toInt().toString(),
-                            fontFamily = InterTightFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 46.sp,
-                            lineHeight = 46.sp,
-                            letterSpacing = (-0.05).em,
-                            color = if (isAlwaysBlocked) DesplugTextSecondary else DesplugBlue
-                        )
-                        Text(
-                            text = "minutos por dia",
-                            fontFamily = InterTightFamily,
-                            fontWeight = FontWeight.Normal,
-                            fontSize = 14.sp,
-                            color = DesplugTextSecondary,
-                            modifier = Modifier.padding(bottom = 6.dp)
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    // Brilho ambiente no topo do card (radial-gradient sutil com a cor atual)
+                    if (!isAlwaysBlocked) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            currentColor.copy(alpha = 0.16f),
+                                            Color.Transparent
+                                        ),
+                                        center = Offset(200f, 0f),
+                                        radius = 500f
+                                    )
+                                )
                         )
                     }
 
-                    // Chips de Presets Rápidos
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(15f, 30f, 60f, 120f, 240f).forEach { preset ->
-                            val label = if (preset >= 60f) "${(preset / 60).toInt()}h" else "${preset.toInt()}m"
-                            DesplugChip(
-                                text = label,
-                                isSelected = !isAlwaysBlocked && limitMinutes.toInt() == preset.toInt(),
-                                onClick = {
-                                    isAlwaysBlocked = false
-                                    limitMinutes = preset
-                                }
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = "LIMITE DIÁRIO",
+                            fontFamily = InterTightFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            letterSpacing = 0.14.em,
+                            color = Color(0xFF8B8B99)
+                        )
+
+                        // Número Grande com gradiente branco -> currentColor
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                        ) {
+                            if (isAlwaysBlocked) {
+                                Text(
+                                    text = limitMinutes.toInt().toString(),
+                                    fontFamily = InterTightFamily,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 64.sp,
+                                    lineHeight = 64.sp,
+                                    letterSpacing = (-0.02).em,
+                                    color = DesplugTextSecondary
+                                )
+                            } else {
+                                Text(
+                                    text = limitMinutes.toInt().toString(),
+                                    fontFamily = InterTightFamily,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 64.sp,
+                                    lineHeight = 64.sp,
+                                    letterSpacing = (-0.02).em,
+                                    style = TextStyle(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(Color.White, currentColor)
+                                        )
+                                    )
+                                )
+                            }
+                            Text(
+                                text = "minutos por dia",
+                                fontFamily = InterTightFamily,
+                                fontWeight = FontWeight.Normal,
+                                fontSize = 15.sp,
+                                color = Color(0xFF9A9AA8),
+                                modifier = Modifier.padding(bottom = 8.dp)
                             )
                         }
-                    }
 
-                    Slider(
-                        value = limitMinutes,
-                        onValueChange = {
-                            isAlwaysBlocked = false
-                            limitMinutes = it
-                        },
-                        valueRange = 5f..240f,
-                        steps = 46,
-                        colors = SliderDefaults.colors(
-                            thumbColor = DesplugBlue,
-                            activeTrackColor = DesplugBlue,
-                            inactiveTrackColor = DesplugTrackBg
-                        ),
-                        enabled = !isAlwaysBlocked
-                    )
+                        // Hint: "X% do seu dia no app"
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 18.dp)
+                        ) {
+                            Text(
+                                text = "$dayPercent%",
+                                fontFamily = InterTightFamily,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = if (isAlwaysBlocked) DesplugTextSecondary else currentColor
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "do seu dia no app",
+                                fontFamily = InterTightFamily,
+                                fontSize = 13.sp,
+                                color = Color(0xFF7A7A88)
+                            )
+                        }
+
+                        // Chips de Presets Rápidos Sincronizados (15m, 30m, 1h, 2h, 4h)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                15f to "15m",
+                                30f to "30m",
+                                60f to "1h",
+                                120f to "2h",
+                                240f to "4h"
+                            ).forEach { (preset, label) ->
+                                val isSelected = !isAlwaysBlocked && limitMinutes.toInt() == preset.toInt()
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(36.dp)
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .then(
+                                            if (isSelected) {
+                                                Modifier
+                                                    .shadow(
+                                                        elevation = 12.dp,
+                                                        shape = RoundedCornerShape(999.dp),
+                                                        spotColor = currentColor,
+                                                        ambientColor = currentColor
+                                                    )
+                                                    .background(Color.White)
+                                            } else {
+                                                Modifier
+                                                    .background(Color.White.copy(alpha = 0.03f))
+                                                    .border(
+                                                        width = 1.dp,
+                                                        color = Color.White.copy(alpha = 0.10f),
+                                                        shape = RoundedCornerShape(999.dp)
+                                                    )
+                                            }
+                                        )
+                                        .clickable {
+                                            isAlwaysBlocked = false
+                                            limitMinutes = preset
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontFamily = InterTightFamily,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                        fontSize = 13.sp,
+                                        color = if (isSelected) Color(0xFF0B0B10) else Color(0xFFE8E8F0)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Slider Moderno com Gradiente Fixo, Pontilhados e Thumb Halo
+                        ModernLimitSlider(
+                            value = limitMinutes,
+                            onValueChange = {
+                                isAlwaysBlocked = false
+                                limitMinutes = it
+                            },
+                            min = 5f,
+                            max = 240f,
+                            step = 5f,
+                            enabled = !isAlwaysBlocked,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                 }
             }
 

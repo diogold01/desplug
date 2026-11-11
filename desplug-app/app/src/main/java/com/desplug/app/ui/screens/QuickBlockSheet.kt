@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -194,7 +196,9 @@ fun QuickBlockSheet(
             fontSize = 46.sp,
             letterSpacing = (-0.04).em,
             color = DesplugTextPrimary.copy(alpha = 0.3f),
-            modifier = Modifier.padding(top = 56.dp, start = 24.dp)
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(top = 16.dp, start = 24.dp)
         )
 
         // Sheet com raio 36dp no topo
@@ -202,7 +206,8 @@ fun QuickBlockSheet(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 92.dp)
+                .statusBarsPadding()
+                .padding(top = 56.dp)
                 .graphicsLayer {
                     translationY = sheetOffsetY.value
                 }
@@ -213,7 +218,8 @@ fun QuickBlockSheet(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) { /* Consome clique para não fechar ao tocar dentro do Sheet */ }
-                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp)
+                .navigationBarsPadding()
+                .padding(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 16.dp)
         ) {
             // Alça superior (40x4dp, #2B3347)
             Box(
