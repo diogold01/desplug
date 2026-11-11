@@ -26,6 +26,15 @@ Aplicativo Android local-first (sem backend, sem login, sem conexao externa) par
 - FOREGROUND_SERVICE / POST_NOTIFICATIONS: persistencia do servico de monitoramento.
 - RECEIVE_BOOT_COMPLETED: inicializacao com o sistema.
 
+## Liberar Configuracoes Restritas (Android 13+)
+
+Ao instalar o APK via sideload, o Android bloqueia o Servico de Acessibilidade por padrao ("Configuracao restrita"). Para liberar:
+
+1. Acesse `Configuracoes > Aplicativos > Desplug`.
+2. Toque no menu de tres pontos no canto superior direito (`⋮`).
+3. Selecione `Permitir configuracoes restritas` e confirme a autenticacao (PIN ou biometria).
+4. Retorne em `Configuracoes > Acessibilidade > Desplug` e ative o servico.
+
 ## Build
 
 Compilacao via Gradle ou Android Studio:
