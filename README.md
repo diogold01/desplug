@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="desplug-app/app/ic_launcher-playstore.png" width="120" height="120" alt="Desplug" />
-</p>
-
-# Desplug
+# Desplug   <img src="desplug-app/app/ic_launcher-playstore.png" width="120" height="120" alt="Desplug" />
 
 Aplicativo Android local-first (sem backend, sem login, sem conexao externa) para gerenciamento de tempo de tela e bloqueio de aplicativos.
 
